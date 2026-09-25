@@ -61,6 +61,23 @@ def test_save_persists_snapshot_and_later_pier_delete_keeps_run(fresh_db):
     assert run_again["result"]["raw_count"] == 74
 
 
+def test_saved_run_matches_dry_run_with_multiple_piers(fresh_db):
+    # 客餐厅 has two seeded piers; stored numbers must equal the pre-save round-trip
+    dry = estimate_service.run_estimate(1, 1, None, False, "")
+    saved = estimate_service.run_estimate(1, 1, None, True, "")
+    run = history.get_run(saved["run_id"])
+    for key in ("area_m2", "deduct_m2", "net_area_m2", "raw_count", "order_count"):
+        assert run["result"][key] == dry[key]
+    snap = run["result"]["piers_snapshot"]
+    assert len(snap) == 2  # full pier list kept, none dropped
+    assert abs(sum(p["length"] * p["width"] for p in snap) - dry["deduct_m2"]) < 1e-9
+
+    # list summary and detail view read the same stored numbers
+    listed = [r for r in history.list_runs() if r["id"] == saved["run_id"]][0]
+    assert listed["result"]["net_area_m2"] == run["result"]["net_area_m2"]
+    assert listed["result"]["order_count"] == run["result"]["order_count"]
+
+
 def test_invalid_pier_edges_fail_and_not_saved(fresh_db):
     rooms.add_pier(2, "负边", -1.0, 0.5)  # bypasses API validation on purpose
     with pytest.raises(HTTPException) as exc:
