@@ -38,7 +38,9 @@ def run_estimate(room_id: int, tile_id: int, waste_pct: float | None, save: bool
     if save:
         from app.services.pier_snapshot import shape_payload_for_persist
 
-        stored = shape_payload_for_persist(calc, room, tile, waste, piers)
+        # Persist the exact response numbers (all piers deducted) plus the
+        # pier snapshot; later add/remove of piers never mutates this run.
+        stored = shape_payload_for_persist(calc, piers)
         payload = {**stored, "room_id": room_id, "tile_id": tile_id}
         run_id = history.insert_run(room_id, tile_id, waste, payload, note)
 

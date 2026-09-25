@@ -61,6 +61,36 @@ def test_save_persists_snapshot_and_later_pier_delete_keeps_run(fresh_db):
     assert run_again["result"]["raw_count"] == 74
 
 
+def test_saved_run_response_detail_and_list_share_one_calc(fresh_db):
+    # Two seeded piers: response, opened detail and list summary must match.
+    res = estimate_service.run_estimate(1, 1, None, True, "snapshot")
+    detail = history.get_run(res["run_id"])["result"]
+    row = next(r for r in history.list_runs() if r["id"] == res["run_id"])["result"]
+    for key in ("deduct_m2", "net_area_m2", "raw_count", "order_count"):
+        assert res[key] == detail[key] == row[key], key
+    assert len(detail["piers_snapshot"]) == 2
+    assert detail["pier_count"] == 2
+
+
+def test_add_pier_recomputes_over_current_set_without_touching_old_run(fresh_db):
+    res = estimate_service.run_estimate(1, 1, None, True, "two")
+    assert res["deduct_m2"] == 0.37
+
+    rooms.add_pier(1, "柱C", 0.2, 0.2)  # +0.04 -> 0.41
+    res2 = estimate_service.run_estimate(1, 1, None, True, "three")
+    assert res2["deduct_m2"] == 0.41
+    assert res2["net_area_m2"] == 26.59
+    detail2 = history.get_run(res2["run_id"])["result"]
+    assert len(detail2["piers_snapshot"]) == 3
+    assert detail2["deduct_m2"] == res2["deduct_m2"]
+
+    # the earlier numbered run keeps its write-time, two-pier numbers
+    old = history.get_run(res["run_id"])["result"]
+    assert old["deduct_m2"] == 0.37
+    assert old["net_area_m2"] == 26.63
+    assert old["order_count"] == res["order_count"]
+
+
 def test_invalid_pier_edges_fail_and_not_saved(fresh_db):
     rooms.add_pier(2, "负边", -1.0, 0.5)  # bypasses API validation on purpose
     with pytest.raises(HTTPException) as exc:
